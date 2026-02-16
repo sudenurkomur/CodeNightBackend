@@ -2,5 +2,7 @@ namespace CodeNight.Domain.Enums;
 
 public enum NotificationChannel
 {
-    BiP
+    BiP,
+    INAPP,
+    PUSH
 }

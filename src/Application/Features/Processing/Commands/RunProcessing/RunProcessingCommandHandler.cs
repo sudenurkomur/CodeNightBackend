@@ -1,3 +1,4 @@
+using CodeNight.Application.Common;
 using CodeNight.Application.DTOs;
 using CodeNight.Application.Interfaces;
 using CodeNight.Domain.Constants;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeNight.Application.Features.Processing.Commands.RunProcessing;
 
-public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand, ProcessingResultDto>
+public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand, ApiResponse<ProcessingResultDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,7 +18,7 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         _context = context;
     }
 
-    public async Task<ProcessingResultDto> Handle(RunProcessingCommand request, CancellationToken cancellationToken)
+    public async Task<ApiResponse<ProcessingResultDto>> Handle(RunProcessingCommand request, CancellationToken cancellationToken)
     {
         var asOfDate = request.AsOfDate;
         var result = new ProcessingResultDto { AsOfDate = asOfDate };
@@ -53,26 +54,27 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         await _context.SaveChangesAsync(cancellationToken);
 
         result.UsersProcessed = users.Count;
-        return result;
+
+        return new ApiResponse<ProcessingResultDto>
+        {
+            Data = result,
+            Meta = new MetaInfo { AsOfDate = asOfDate.ToString("yyyy-MM-dd") }
+        };
     }
 
     private async Task CalculateUserState(User user, DateOnly asOfDate, CancellationToken ct)
     {
-        // Get today's events
         var todayEvents = await _context.Events
             .Where(e => e.UserId == user.UserId && e.Date == asOfDate)
             .ToListAsync(ct);
 
-        // Get 7-day window events
         var sevenDaysAgo = asOfDate.AddDays(-6);
         var weekEvents = await _context.Events
             .Where(e => e.UserId == user.UserId && e.Date >= sevenDaysAgo && e.Date <= asOfDate)
             .ToListAsync(ct);
 
-        // Calculate streak: count consecutive days with listen events going backward from asOfDate
         var streakDays = await CalculateListenStreak(user.UserId, asOfDate, ct);
 
-        // Calculate current total points from ledger
         var totalPoints = await _context.PointsLedgerEntries
             .Where(pl => pl.UserId == user.UserId)
             .SumAsync(pl => pl.PointsDelta, ct);
@@ -141,18 +143,14 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         foreach (var challenge in activeChallenges)
         {
             if (IsChallengeTriggered(challenge, state))
-            {
                 triggeredChallenges.Add(challenge);
-            }
         }
 
         if (triggeredChallenges.Count == 0)
             return (0, 0, 0);
 
-        // Select the highest priority challenge (lowest priority number)
         var selectedChallenge = triggeredChallenges.OrderBy(c => c.Priority).First();
 
-        // Create decision for selected
         var selectedDecision = new ChallengeDecision
         {
             DecisionId = Guid.NewGuid(),
@@ -161,7 +159,6 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         };
         _context.ChallengeDecisions.Add(selectedDecision);
 
-        // Create challenge award
         var award = new ChallengeAward
         {
             AwardId = Guid.NewGuid(),
@@ -173,7 +170,6 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         };
         _context.ChallengeAwards.Add(award);
 
-        // Create triggered challenge records
         foreach (var challenge in triggeredChallenges)
         {
             var isSelected = challenge.ChallengeId == selectedChallenge.ChallengeId;
@@ -189,7 +185,6 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
             });
         }
 
-        // Insert points ledger entry (idempotent via unique index source+source_ref)
         var ledgerExists = await _context.PointsLedgerEntries
             .AnyAsync(pl => pl.Source == PointSources.ChallengeReward && pl.SourceRef == award.AwardId, ct);
 
@@ -205,14 +200,10 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
                 CreatedAt = DateTime.UtcNow
             });
 
-            // Update total points in user state
             if (user.UserState != null)
-            {
                 user.UserState.TotalPoints += selectedChallenge.RewardPoints;
-            }
         }
 
-        // Send notification for selected challenge
         int notificationsSent = 0;
         var message = string.Format(
             NotificationTemplates.ChallengeRewardEarned,
@@ -234,10 +225,7 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
 
     private static bool IsChallengeTriggered(Challenge challenge, UserState state)
     {
-        // Parse condition string as "metric>=threshold" format
-        // e.g., "listen_minutes_today>=60", "shares_7d>=10", "listen_streak_days>=7"
         var condition = challenge.Condition.Trim();
-
         var operators = new[] { ">=", "<=", ">", "<", "==" };
         string? op = null;
         string metricName = string.Empty;
@@ -295,12 +283,10 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
 
         var totalPoints = user.UserState.TotalPoints;
 
-        // Find badges whose condition (threshold) is met by total_points
         var eligibleBadges = await _context.Badges
             .Where(b => b.Condition <= totalPoints)
             .ToListAsync(ct);
 
-        // Get already awarded badge IDs
         var alreadyAwardedBadgeIds = await _context.BadgeAwards
             .Where(ba => ba.UserId == user.UserId)
             .Select(ba => ba.BadgeId)
@@ -319,7 +305,6 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
                 AwardedAt = DateTime.UtcNow
             });
 
-            // Send badge notification
             var badgeMessage = string.Format(
                 NotificationTemplates.BadgeEarned,
                 badge.BadgeName,

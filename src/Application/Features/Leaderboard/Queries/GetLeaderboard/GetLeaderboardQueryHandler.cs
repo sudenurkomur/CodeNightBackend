@@ -1,3 +1,4 @@
+using CodeNight.Application.Common;
 using CodeNight.Application.DTOs;
 using CodeNight.Application.Interfaces;
 using MediatR;
@@ -5,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeNight.Application.Features.Leaderboard.Queries.GetLeaderboard;
 
-public class GetLeaderboardQueryHandler : IRequestHandler<GetLeaderboardQuery, List<LeaderboardEntryDto>>
+public class GetLeaderboardQueryHandler : IRequestHandler<GetLeaderboardQuery, ApiResponse<List<LeaderboardEntryDto>>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -14,29 +15,38 @@ public class GetLeaderboardQueryHandler : IRequestHandler<GetLeaderboardQuery, L
         _context = context;
     }
 
-    public async Task<List<LeaderboardEntryDto>> Handle(GetLeaderboardQuery request, CancellationToken cancellationToken)
+    public async Task<ApiResponse<List<LeaderboardEntryDto>>> Handle(
+        GetLeaderboardQuery request, CancellationToken cancellationToken)
     {
+        var pagination = new CursorPaginationParams { Limit = Math.Clamp(request.Limit, 1, 100), Cursor = request.Cursor };
+        var offset = pagination.GetOffset();
+
         var leaderboard = await _context.UserStates
             .AsNoTracking()
-            .Include(us => us.User)
             .OrderByDescending(us => us.TotalPoints)
-            .Take(request.Top)
+            .ThenBy(us => us.UserId)
+            .Skip(offset)
+            .Take(pagination.Limit)
             .Select(us => new LeaderboardEntryDto
             {
                 UserId = us.UserId,
-                Name = us.User.Name,
-                Surname = us.User.Surname,
-                City = us.User.City,
                 TotalPoints = us.TotalPoints
             })
             .ToListAsync(cancellationToken);
 
-        // Assign ranks
         for (int i = 0; i < leaderboard.Count; i++)
         {
-            leaderboard[i].Rank = i + 1;
+            leaderboard[i].Rank = offset + i + 1;
         }
 
-        return leaderboard;
+        return new ApiResponse<List<LeaderboardEntryDto>>
+        {
+            Data = leaderboard,
+            Meta = new MetaInfo
+            {
+                AsOfDate = request.AsOfDate.ToString("yyyy-MM-dd"),
+                NextCursor = CursorPaginationParams.EncodeCursor(offset, pagination.Limit, leaderboard.Count)
+            }
+        };
     }
 }

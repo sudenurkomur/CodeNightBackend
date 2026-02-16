@@ -1,3 +1,4 @@
+using CodeNight.Application.Common;
 using CodeNight.Application.DTOs;
 using CodeNight.Application.Interfaces;
 using MediatR;
@@ -5,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeNight.Application.Features.Ledger.Queries.GetUserLedger;
 
-public class GetUserLedgerQueryHandler : IRequestHandler<GetUserLedgerQuery, List<LedgerEntryDto>>
+public class GetUserLedgerQueryHandler : IRequestHandler<GetUserLedgerQuery, ApiResponse<List<LedgerEntryDto>>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -14,29 +15,43 @@ public class GetUserLedgerQueryHandler : IRequestHandler<GetUserLedgerQuery, Lis
         _context = context;
     }
 
-    public async Task<List<LedgerEntryDto>> Handle(GetUserLedgerQuery request, CancellationToken cancellationToken)
+    public async Task<ApiResponse<List<LedgerEntryDto>>> Handle(
+        GetUserLedgerQuery request, CancellationToken cancellationToken)
     {
-        var entries = await _context.PointsLedgerEntries
+        var pagination = new CursorPaginationParams { Limit = Math.Clamp(request.Limit, 1, 100), Cursor = request.Cursor };
+        var offset = pagination.GetOffset();
+
+        var query = _context.PointsLedgerEntries
             .AsNoTracking()
-            .Where(pl => pl.UserId == request.UserId)
-            .OrderBy(pl => pl.CreatedAt)
+            .Where(pl => pl.UserId == request.UserId);
+
+        if (request.From.HasValue)
+            query = query.Where(pl => DateOnly.FromDateTime(pl.CreatedAt) >= request.From.Value);
+        if (request.To.HasValue)
+            query = query.Where(pl => DateOnly.FromDateTime(pl.CreatedAt) <= request.To.Value);
+
+        var entries = await query
+            .OrderByDescending(pl => pl.CreatedAt)
+            .Skip(offset)
+            .Take(pagination.Limit)
             .Select(pl => new LedgerEntryDto
             {
-                Date = DateOnly.FromDateTime(pl.CreatedAt),
+                LedgerId = pl.LedgerId,
+                UserId = pl.UserId,
                 PointsDelta = pl.PointsDelta,
                 Source = pl.Source,
-                RunningTotal = 0 // will be computed below
+                SourceRef = pl.SourceRef,
+                CreatedAt = pl.CreatedAt
             })
             .ToListAsync(cancellationToken);
 
-        // Compute running total
-        long runningTotal = 0;
-        foreach (var entry in entries)
+        return new ApiResponse<List<LedgerEntryDto>>
         {
-            runningTotal += entry.PointsDelta;
-            entry.RunningTotal = runningTotal;
-        }
-
-        return entries;
+            Data = entries,
+            Meta = new MetaInfo
+            {
+                NextCursor = CursorPaginationParams.EncodeCursor(offset, pagination.Limit, entries.Count)
+            }
+        };
     }
 }

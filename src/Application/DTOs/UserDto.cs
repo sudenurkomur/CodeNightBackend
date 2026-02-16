@@ -9,3 +9,9 @@ public class UserDto
     public string Role { get; set; } = null!;
     public long TotalPoints { get; set; }
 }
+
+public class UserDetailDto
+{
+    public UserDto User { get; set; } = null!;
+    public UserStateDto? State { get; set; }
+}

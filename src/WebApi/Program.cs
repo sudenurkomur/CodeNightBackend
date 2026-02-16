@@ -1,4 +1,4 @@
-using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using CodeNight.Application.Behaviors;
 using CodeNight.Application.Interfaces;
@@ -29,12 +29,13 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBeh
 // ── FluentValidation ──────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);
 
-// ── Controllers + JSON ────────────────────────────────────────────────
+// ── Controllers + JSON (snake_case for frontend compat) ───────────────
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
 // ── Swagger / OpenAPI ─────────────────────────────────────────────────
@@ -45,7 +46,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "CodeNight API",
         Version = "v1",
-        Description = "Hackathon Project - Music Activity Gamification API"
+        Description = "Hackathon Project — Music Activity Gamification API"
     });
 });
 
@@ -82,7 +83,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "CodeNight API v1");
-        c.RoutePrefix = string.Empty; // Swagger UI at root
+        c.RoutePrefix = string.Empty;
     });
 }
 

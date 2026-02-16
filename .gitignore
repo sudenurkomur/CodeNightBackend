@@ -18,3 +18,7 @@ Thumbs.db
 ## Build
 publish/
 out/
+.env
+
+## Secrets
+.env

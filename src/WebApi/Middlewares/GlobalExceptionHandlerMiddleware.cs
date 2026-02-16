@@ -1,5 +1,6 @@
-using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using CodeNight.Application.Common;
 using FluentValidation;
 
 namespace CodeNight.WebApi.Middlewares;
@@ -8,6 +9,12 @@ public class GlobalExceptionHandlerMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionHandlerMiddleware> _logger;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     public GlobalExceptionHandlerMiddleware(RequestDelegate next, ILogger<GlobalExceptionHandlerMiddleware> logger)
     {
@@ -29,62 +36,76 @@ public class GlobalExceptionHandlerMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        var (statusCode, response) = exception switch
+        var requestId = context.TraceIdentifier;
+
+        var (statusCode, errorResponse) = exception switch
         {
             ValidationException validationEx => (
-                HttpStatusCode.BadRequest,
-                new ErrorResponse
+                StatusCodes.Status400BadRequest,
+                new ApiErrorResponse
                 {
-                    Status = (int)HttpStatusCode.BadRequest,
-                    Title = "Validation Error",
-                    Errors = validationEx.Errors
-                        .Select(e => new ErrorDetail { Field = e.PropertyName, Message = e.ErrorMessage })
-                        .ToList()
-                }),
-            KeyNotFoundException => (
-                HttpStatusCode.NotFound,
-                new ErrorResponse
-                {
-                    Status = (int)HttpStatusCode.NotFound,
-                    Title = "Not Found",
-                    Errors = new List<ErrorDetail>
+                    Error = new ApiError
                     {
-                        new() { Field = string.Empty, Message = exception.Message }
+                        Code = ErrorCodes.ValidationError,
+                        Message = "Validation failed.",
+                        Details = validationEx.Errors.Select(e => new ApiErrorDetail
+                        {
+                            Field = e.PropertyName,
+                            Issue = e.ErrorMessage
+                        }).ToList(),
+                        RequestId = requestId
                     }
-                }),
+                }
+            ),
+            KeyNotFoundException notFoundEx => (
+                StatusCodes.Status404NotFound,
+                new ApiErrorResponse
+                {
+                    Error = new ApiError
+                    {
+                        Code = ErrorCodes.NotFound,
+                        Message = notFoundEx.Message,
+                        Details = new List<ApiErrorDetail>(),
+                        RequestId = requestId
+                    }
+                }
+            ),
+            InvalidOperationException conflictEx when conflictEx.Message.Contains("conflict", StringComparison.OrdinalIgnoreCase) => (
+                StatusCodes.Status409Conflict,
+                new ApiErrorResponse
+                {
+                    Error = new ApiError
+                    {
+                        Code = ErrorCodes.Conflict,
+                        Message = conflictEx.Message,
+                        Details = new List<ApiErrorDetail>(),
+                        RequestId = requestId
+                    }
+                }
+            ),
             _ => (
-                HttpStatusCode.InternalServerError,
-                new ErrorResponse
+                StatusCodes.Status500InternalServerError,
+                new ApiErrorResponse
                 {
-                    Status = (int)HttpStatusCode.InternalServerError,
-                    Title = "Internal Server Error",
-                    Errors = new List<ErrorDetail>
+                    Error = new ApiError
                     {
-                        new() { Field = string.Empty, Message = "An unexpected error occurred." }
+                        Code = ErrorCodes.InternalError,
+                        Message = "An unexpected error occurred.",
+                        Details = new List<ApiErrorDetail>(),
+                        RequestId = requestId
                     }
-                })
+                }
+            )
         };
 
-        _logger.LogError(exception, "An error occurred: {Message}", exception.Message);
+        _logger.LogError(exception,
+            "Request {RequestId} failed with status {StatusCode}: {Message}",
+            requestId, statusCode, exception.Message);
 
+        context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)statusCode;
 
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var json = JsonSerializer.Serialize(response, options);
+        var json = JsonSerializer.Serialize(errorResponse, JsonOptions);
         await context.Response.WriteAsync(json);
     }
-}
-
-public class ErrorResponse
-{
-    public int Status { get; set; }
-    public string Title { get; set; } = null!;
-    public List<ErrorDetail> Errors { get; set; } = new();
-}
-
-public class ErrorDetail
-{
-    public string Field { get; set; } = null!;
-    public string Message { get; set; } = null!;
 }

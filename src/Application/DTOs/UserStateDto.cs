@@ -2,6 +2,8 @@ namespace CodeNight.Application.DTOs;
 
 public class UserStateDto
 {
+    public Guid UserId { get; set; }
+    public string AsOfDate { get; set; } = null!;
     public long ListenMinutesToday { get; set; }
     public long UniqueTracksToday { get; set; }
     public long PlaylistAdditionsToday { get; set; }
