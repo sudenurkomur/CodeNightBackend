@@ -6,8 +6,7 @@ namespace CodeNight.Application.Features.Users.Queries.GetUserChallengeAwards;
 
 public record GetUserChallengeAwardsQuery(
     Guid UserId,
-    DateOnly? From = null,
-    DateOnly? To = null,
+    DateOnly? From,
+    DateOnly? To,
     int Limit = 30,
-    string? Cursor = null
-) : IRequest<ApiResponse<List<ChallengeAwardDetailDto>>>;
+    string? Cursor = null) : IRequest<ApiResponse<List<ChallengeAwardDetailDto>>>;

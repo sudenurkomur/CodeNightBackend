@@ -6,45 +6,43 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeNight.Application.Features.Users.Queries.GetUserBadges;
 
-public class GetUserBadgesQueryHandler : IRequestHandler<GetUserBadgesQuery, ApiResponse<UserBadgesDto>>
+public class GetUserBadgesQueryHandler
+    : IRequestHandler<GetUserBadgesQuery, ApiResponse<UserBadgesDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IApplicationDbContext _db;
 
-    public GetUserBadgesQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
+    public GetUserBadgesQueryHandler(IApplicationDbContext db) => _db = db;
 
-    public async Task<ApiResponse<UserBadgesDto>> Handle(GetUserBadgesQuery request, CancellationToken cancellationToken)
+    public async Task<ApiResponse<UserBadgesDto>> Handle(
+        GetUserBadgesQuery request, CancellationToken cancellationToken)
     {
-        var availableBadges = await _context.Badges
-            .AsNoTracking()
-            .Select(b => new BadgeDto
+        var allBadges = await _db.Badges
+            .OrderBy(b => b.Condition)
+            .ToListAsync(cancellationToken);
+
+        var awardedBadges = await _db.BadgeAwards
+            .Where(ba => ba.UserId == request.UserId)
+            .ToListAsync(cancellationToken);
+
+        var dto = new UserBadgesDto
+        {
+            AvailableBadges = allBadges.Select(b => new BadgeDto
             {
                 BadgeId = b.BadgeId,
                 BadgeName = b.BadgeName,
                 ThresholdPoints = b.Condition
-            })
-            .ToListAsync(cancellationToken);
-
-        var awardedBadges = await _context.BadgeAwards
-            .AsNoTracking()
-            .Where(ba => ba.UserId == request.UserId)
-            .Select(ba => new BadgeAwardDto
+            }).ToList(),
+            AwardedBadges = awardedBadges.Select(ba => new BadgeAwardDto
             {
                 UserId = ba.UserId,
                 BadgeId = ba.BadgeId,
                 AwardedAt = ba.AwardedAt
-            })
-            .ToListAsync(cancellationToken);
+            }).ToList()
+        };
 
         return new ApiResponse<UserBadgesDto>
         {
-            Data = new UserBadgesDto
-            {
-                AvailableBadges = availableBadges,
-                AwardedBadges = awardedBadges
-            },
+            Data = dto,
             Meta = new MetaInfo { AsOfDate = request.AsOfDate.ToString("yyyy-MM-dd") }
         };
     }

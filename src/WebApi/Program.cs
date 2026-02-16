@@ -4,9 +4,11 @@ using CodeNight.Application.Behaviors;
 using CodeNight.Application.Interfaces;
 using CodeNight.Infrastructure.Persistence;
 using CodeNight.WebApi.Middlewares;
+using CodeNight.WebApi.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -61,6 +63,16 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ── Health Checks ────────────────────────────────────────────────────
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        builder.Configuration.GetConnectionString("DefaultConnection")!,
+        name: "PostgreSQL",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "db", "postgresql" });
+
+builder.Services.AddHostedService<HealthLoggerBackgroundService>();
+
 // ── Logging ───────────────────────────────────────────────────────────
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -88,6 +100,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();

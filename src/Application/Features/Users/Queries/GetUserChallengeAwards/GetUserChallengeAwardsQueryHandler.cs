@@ -10,55 +10,54 @@ namespace CodeNight.Application.Features.Users.Queries.GetUserChallengeAwards;
 public class GetUserChallengeAwardsQueryHandler
     : IRequestHandler<GetUserChallengeAwardsQuery, ApiResponse<List<ChallengeAwardDetailDto>>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IApplicationDbContext _db;
 
-    public GetUserChallengeAwardsQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
+    public GetUserChallengeAwardsQueryHandler(IApplicationDbContext db) => _db = db;
 
     public async Task<ApiResponse<List<ChallengeAwardDetailDto>>> Handle(
         GetUserChallengeAwardsQuery request, CancellationToken cancellationToken)
     {
-        var pagination = new CursorPaginationParams { Limit = Math.Clamp(request.Limit, 1, 100), Cursor = request.Cursor };
+        var pagination = new CursorPaginationParams { Limit = request.Limit, Cursor = request.Cursor };
         var offset = pagination.GetOffset();
 
-        var query = _context.ChallengeAwards
-            .AsNoTracking()
+        var query = _db.ChallengeAwards
             .Include(ca => ca.TriggeredChallenges)
             .Where(ca => ca.UserId == request.UserId);
 
         if (request.From.HasValue)
             query = query.Where(ca => ca.AsOfDate >= request.From.Value);
+
         if (request.To.HasValue)
             query = query.Where(ca => ca.AsOfDate <= request.To.Value);
 
         var awards = await query
-            .OrderByDescending(ca => ca.CreatedAt)
+            .OrderByDescending(ca => ca.AsOfDate)
+            .ThenByDescending(ca => ca.CreatedAt)
             .Skip(offset)
             .Take(pagination.Limit)
-            .Select(ca => new ChallengeAwardDetailDto
-            {
-                AwardId = ca.AwardId,
-                UserId = ca.UserId,
-                AsOfDate = ca.AsOfDate.ToString("yyyy-MM-dd"),
-                RewardPoints = ca.RewardPoints,
-                Timestamp = ca.CreatedAt,
-                TriggeredChallenges = ca.TriggeredChallenges.Select(tc => tc.ChallengeId).ToList(),
-                SelectedChallenge = ca.TriggeredChallenges
-                    .Where(tc => tc.Status == TriggeredChallengeStatus.SELECTED)
-                    .Select(tc => tc.ChallengeId)
-                    .FirstOrDefault(),
-                SuppressedChallenges = ca.TriggeredChallenges
-                    .Where(tc => tc.Status == TriggeredChallengeStatus.SUPPRESSED)
-                    .Select(tc => tc.ChallengeId)
-                    .ToList()
-            })
             .ToListAsync(cancellationToken);
+
+        var dtos = awards.Select(a => new ChallengeAwardDetailDto
+        {
+            AwardId = a.AwardId,
+            UserId = a.UserId,
+            AsOfDate = a.AsOfDate.ToString("yyyy-MM-dd"),
+            TriggeredChallenges = a.TriggeredChallenges.Select(tc => tc.ChallengeId).ToList(),
+            SelectedChallenge = a.TriggeredChallenges
+                .Where(tc => tc.Status == TriggeredChallengeStatus.SELECTED)
+                .Select(tc => tc.ChallengeId)
+                .FirstOrDefault(),
+            SuppressedChallenges = a.TriggeredChallenges
+                .Where(tc => tc.Status == TriggeredChallengeStatus.SUPPRESSED)
+                .Select(tc => tc.ChallengeId)
+                .ToList(),
+            RewardPoints = a.RewardPoints,
+            Timestamp = a.CreatedAt
+        }).ToList();
 
         return new ApiResponse<List<ChallengeAwardDetailDto>>
         {
-            Data = awards,
+            Data = dtos,
             Meta = new MetaInfo
             {
                 NextCursor = CursorPaginationParams.EncodeCursor(offset, pagination.Limit, awards.Count)

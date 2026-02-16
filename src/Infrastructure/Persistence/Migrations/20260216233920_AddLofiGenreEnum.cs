@@ -5,7 +5,7 @@
 namespace CodeNight.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddLofiGenreAndUppercaseEnums : Migration
+    public partial class AddLofiGenreEnum : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

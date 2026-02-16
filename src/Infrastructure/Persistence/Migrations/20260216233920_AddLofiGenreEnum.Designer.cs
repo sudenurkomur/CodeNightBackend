@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CodeNight.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260216223120_UpdateEnumsAndSchema")]
-    partial class UpdateEnumsAndSchema
+    [Migration("20260216233920_AddLofiGenreEnum")]
+    partial class AddLofiGenreEnum
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

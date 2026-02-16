@@ -6,8 +6,7 @@ namespace CodeNight.Application.Features.Users.Queries.GetUserNotifications;
 
 public record GetUserNotificationsQuery(
     Guid UserId,
-    DateOnly? From = null,
-    DateOnly? To = null,
+    DateOnly? From,
+    DateOnly? To,
     int Limit = 50,
-    string? Cursor = null
-) : IRequest<ApiResponse<List<NotificationDto>>>;
+    string? Cursor = null) : IRequest<ApiResponse<List<NotificationDto>>>;
