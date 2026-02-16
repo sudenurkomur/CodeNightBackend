@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: codenight-postgres
+    env_file:
+      - .env
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codenight} -d ${POSTGRES_DB:-codenightdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  webapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codenight-webapi
+    ports:
+      - "8088:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-codenightdb};Username=${POSTGRES_USER:-codenight};Password=${POSTGRES_PASSWORD:-codenight123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
