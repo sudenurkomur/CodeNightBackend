@@ -62,7 +62,7 @@ public class WhatIfSimulationCommandHandler : IRequestHandler<WhatIfSimulationCo
         var explanation = $"{deltaDescription} ile ";
         if (whatIf.SelectedChallenge.HasValue && whatIf.SelectedChallenge != baseline.SelectedChallenge)
         {
-            var selectedChallenge = activeChallenges.FirstOrDefault(c => c.ChallengeId == whatIf.SelectedChallenge);
+            var selectedChallenge = activeChallenges.Find(c => c.ChallengeId == whatIf.SelectedChallenge);
             explanation += $"'{selectedChallenge?.ChallengeName ?? "bilinmeyen"}' tetiklendi; daha yüksek öncelik olduğu için seçildi.";
         }
         else if (whatIf.TriggeredChallenges.Count > baseline.TriggeredChallenges.Count)
@@ -90,13 +90,10 @@ public class WhatIfSimulationCommandHandler : IRequestHandler<WhatIfSimulationCo
         List<Domain.Entities.Challenge> challenges,
         Dictionary<string, long> metrics)
     {
-        var triggered = new List<Guid>();
-
-        foreach (var c in challenges)
-        {
-            if (EvaluateCondition(c.Condition, metrics))
-                triggered.Add(c.ChallengeId);
-        }
+        var triggered = challenges
+            .Where(c => EvaluateCondition(c.Condition, metrics))
+            .Select(c => c.ChallengeId)
+            .ToList();
 
         Guid? selected = null;
         var suppressed = new List<Guid>();

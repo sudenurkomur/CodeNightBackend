@@ -29,8 +29,10 @@ public class GetChallengesQueryHandler : IRequestHandler<GetChallengesQuery, Api
 
         query = request.Sort?.ToLowerInvariant() switch
         {
-            "priority_asc" => query.OrderBy(c => c.Priority),
-            _ => query.OrderBy(c => c.Priority)
+            "priority_desc" => query.OrderByDescending(c => c.Priority),
+            "reward_desc" => query.OrderByDescending(c => c.RewardPoints),
+            "reward_asc" => query.OrderBy(c => c.RewardPoints),
+            _ => query.OrderBy(c => c.Priority) // default: priority_asc
         };
 
         var challenges = await query

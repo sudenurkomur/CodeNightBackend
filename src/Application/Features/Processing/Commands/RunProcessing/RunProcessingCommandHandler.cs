@@ -138,13 +138,9 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
             .OrderBy(c => c.Priority)
             .ToListAsync(ct);
 
-        var triggeredChallenges = new List<Challenge>();
-
-        foreach (var challenge in activeChallenges)
-        {
-            if (IsChallengeTriggered(challenge, state))
-                triggeredChallenges.Add(challenge);
-        }
+        var triggeredChallenges = activeChallenges
+            .Where(challenge => IsChallengeTriggered(challenge, state))
+            .ToList();
 
         if (triggeredChallenges.Count == 0)
             return (0, 0, 0);
@@ -170,19 +166,18 @@ public class RunProcessingCommandHandler : IRequestHandler<RunProcessingCommand,
         };
         _context.ChallengeAwards.Add(award);
 
-        foreach (var challenge in triggeredChallenges)
+        var triggeredEntities = triggeredChallenges.Select(challenge => new TriggeredChallenge
         {
-            var isSelected = challenge.ChallengeId == selectedChallenge.ChallengeId;
-            var status = isSelected
+            AwardId = award.AwardId,
+            ChallengeId = challenge.ChallengeId,
+            Status = challenge.ChallengeId == selectedChallenge.ChallengeId
                 ? TriggeredChallengeStatus.SELECTED
-                : TriggeredChallengeStatus.SUPPRESSED;
+                : TriggeredChallengeStatus.SUPPRESSED
+        });
 
-            _context.TriggeredChallenges.Add(new TriggeredChallenge
-            {
-                AwardId = award.AwardId,
-                ChallengeId = challenge.ChallengeId,
-                Status = status
-            });
+        foreach (var entity in triggeredEntities)
+        {
+            _context.TriggeredChallenges.Add(entity);
         }
 
         var ledgerExists = await _context.PointsLedgerEntries

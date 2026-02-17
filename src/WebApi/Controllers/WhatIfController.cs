@@ -23,7 +23,10 @@ public class WhatIfController : ControllerBase
         Guid userId,
         [FromBody] WhatIfRequest body)
     {
-        var command = new WhatIfSimulationCommand(userId, body.AsOfDate, body.Delta);
+        if (!body.AsOfDate.HasValue)
+            return BadRequest(new { error = new { code = "VALIDATION_ERROR", message = "as_of_date is required" } });
+
+        var command = new WhatIfSimulationCommand(userId, body.AsOfDate.Value, body.Delta);
         var result = await _mediator.Send(command);
         return Ok(result);
     }
@@ -31,6 +34,6 @@ public class WhatIfController : ControllerBase
 
 public class WhatIfRequest
 {
-    public DateOnly AsOfDate { get; set; }
+    public DateOnly? AsOfDate { get; set; }
     public Dictionary<string, long> Delta { get; set; } = new();
 }

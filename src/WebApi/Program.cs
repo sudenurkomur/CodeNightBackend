@@ -69,7 +69,7 @@ builder.Services.AddHealthChecks()
         builder.Configuration.GetConnectionString("DefaultConnection")!,
         name: "PostgreSQL",
         failureStatus: HealthStatus.Unhealthy,
-        tags: new[] { "db", "postgresql" });
+        tags: ["db", "postgresql"]);
 
 builder.Services.AddHostedService<HealthLoggerBackgroundService>();
 
@@ -103,4 +103,4 @@ app.UseCors();
 app.MapHealthChecks("/health");
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();

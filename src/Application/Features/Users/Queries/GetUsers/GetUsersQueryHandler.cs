@@ -28,11 +28,11 @@ public class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, ApiResponse<L
         // Search filter
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var search = request.Search.ToLower();
+            var search = request.Search.ToLowerInvariant();
             query = query.Where(u =>
-                u.Name.ToLower().Contains(search) ||
-                u.Surname.ToLower().Contains(search) ||
-                u.City.ToLower().Contains(search));
+                u.Name.ToLower().Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                u.Surname.ToLower().Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                u.City.ToLower().Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
         // Sorting
